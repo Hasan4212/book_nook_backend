@@ -6,6 +6,19 @@ import { mongodbAdapter } from 'better-auth/adapters/mongodb'
 import { toNodeHandler } from 'better-auth/node'
 import 'dotenv/config'
 
+// middleware securuty
+
+const veriFyApi = (req,res,next) => {
+  const authHeader = req.headers.authorization;
+  console.log(authHeader); 
+
+  if ( authHeader!== "user logged in") {
+    return res.status(401).send({msg: "Unauthorized!"})
+  } 
+  console.log("I am");
+  next()
+}
+
 const app = express()
 const port = 8000
 
@@ -19,6 +32,8 @@ app.use(
 
 app.use(express.json())
 
+
+  baseURL: process.env.BETTER_AUTH_URL
 
 // mongodb
 
@@ -51,10 +66,8 @@ const auth = betterAuth({
 app.all('/api/auth/*splat', toNodeHandler(auth))
 
 
-// Serialize Mongo documents so `_id` is a plain string for the frontend
 const serialize = (doc) => ({ ...doc, _id: String(doc._id) });
 
-// Parse a document id from the URL, returns null when invalid
 const parseId = (id) => {
   try {
     return new ObjectId(id);
@@ -66,9 +79,7 @@ const parseId = (id) => {
 
 // http://localhost:8000
 
-app.get('/', (req, res) => {
-  res.send('Hello World!')
-})
+
 
 app.get('/books', async (req, res) => {
   try {
@@ -184,7 +195,7 @@ app.post('/borrow', async (req, res) => {
   }
 })
 
-app.get('/borrows', async (req, res) => {
+app.get('/borrows',veriFyApi, async (req, res) => {
   try {
     const query = {};
 
