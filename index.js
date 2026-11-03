@@ -4,19 +4,45 @@ import { MongoClient, ObjectId } from 'mongodb'
 import { betterAuth } from 'better-auth'
 import { mongodbAdapter } from 'better-auth/adapters/mongodb'
 import { toNodeHandler } from 'better-auth/node'
+import { createRemoteJWKSet, jwtVerify } from 'jose'
 import 'dotenv/config'
 
-// middleware securuty
+// JWT verification
+//
+// Tokens are issued by the frontend better-auth server (the jwt() plugin
+// exposes POST /api/auth/token and publishes its public keys at GET
+// /api/auth/jwks). We verify the "Authorization: Bearer <token>" header
+// against those public keys, so a token can only be accepted if it was
+// really signed by the auth server and has not expired.
+const AUTH_ISSUER = process.env.AUTH_SERVER_URL ?? 'http://localhost:3000'
+const authJwks = createRemoteJWKSet(new URL(`${AUTH_ISSUER}/api/auth/jwks`))
 
-const veriFyApi = (req,res,next) => {
-  const authHeader = req.headers.authorization;
-  console.log(authHeader); 
+const verifyApi = async (req, res, next) => {
+  try {
+    const authorization = req.headers.authorization
 
-  if ( authHeader!== "user logged in") {
-    return res.status(401).send({msg: "Unauthorized!"})
-  } 
-  console.log("I am");
-  next()
+    if (!authorization?.startsWith('Bearer ')) {
+      return res
+      .status(401)
+      .send({ message: 'Unauthorized! Authorization: Bearer <token> header is required.' })
+    }
+
+    const token = authorization.slice(7).trim()
+
+    const { payload } = await jwtVerify(token, authJwks, {
+      issuer: AUTH_ISSUER,
+      audience: AUTH_ISSUER,
+    })
+
+    // Verified user info from the token payload (the better-auth session user)
+    req.user = payload
+    next()
+  } catch (error) {
+    console.error('JWT verification failed:', error?.code ?? error)
+    return res
+      .status(401)
+      .send({ message: 'Unauthorized! Invalid, expired or missing token.' })
+  }
 }
 
 const app = express()
@@ -31,9 +57,6 @@ app.use(
 )
 
 app.use(express.json())
-
-
-  baseURL: process.env.BETTER_AUTH_URL
 
 // mongodb
 
@@ -121,7 +144,7 @@ app.get('/books/:id', async (req, res) => {
   }
 })
 
-app.post('/books', async (req, res) => {
+app.post('/books', verifyApi, async (req, res) => {
   try {
     const result = await books.insertOne(req.body);
     const created = await books.findOne({ _id: result.insertedId });
@@ -132,7 +155,7 @@ app.post('/books', async (req, res) => {
   }
 })
 
-app.put('/books/:id', async (req, res) => {
+app.put('/books/:id', verifyApi, async (req, res) => {
   try {
     const bookId = parseId(req.params.id);
 
@@ -156,7 +179,7 @@ app.put('/books/:id', async (req, res) => {
   }
 })
 
-app.delete('/books/:id', async (req, res) => {
+app.delete('/books/:id', verifyApi, async (req, res) => {
   try {
     const bookId = parseId(req.params.id);
 
@@ -179,7 +202,7 @@ app.delete('/books/:id', async (req, res) => {
 
 // borrows
 
-app.post('/borrow', async (req, res) => {
+app.post('/borrow', verifyApi, async (req, res) => {
   try {
     const record = {
       ...req.body,
@@ -195,7 +218,7 @@ app.post('/borrow', async (req, res) => {
   }
 })
 
-app.get('/borrows',veriFyApi, async (req, res) => {
+app.get('/borrows', verifyApi, async (req, res) => {
   try {
     const query = {};
 
@@ -214,7 +237,7 @@ app.get('/borrows',veriFyApi, async (req, res) => {
   }
 })
 
-app.delete('/borrow/:id', async (req, res) => {
+app.delete('/borrow/:id', verifyApi, async (req, res) => {
   try {
     const borrowId = parseId(req.params.id);
 
@@ -237,3 +260,5 @@ app.delete('/borrow/:id', async (req, res) => {
 app.listen(port, () => {
   console.log(`server is running at ${port}`)
 })
+
+
