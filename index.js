@@ -14,7 +14,7 @@ import 'dotenv/config'
 // /api/auth/jwks). We verify the "Authorization: Bearer <token>" header
 // against those public keys, so a token can only be accepted if it was
 // really signed by the auth server and has not expired.
-const AUTH_ISSUER = process.env.AUTH_SERVER_URL ?? 'http://localhost:3000'
+const AUTH_ISSUER = process.env.AUTH_SERVER_URL ?? process.env.AUTH_SERVER_URL
 const authJwks = createRemoteJWKSet(new URL(`${AUTH_ISSUER}/api/auth/jwks`))
 
 const verifyApi = async (req, res, next) => {
@@ -51,7 +51,7 @@ const port = 8000
 // middleware
 app.use(
   cors({
-    origin: ['http://localhost:3000'],
+    origin: [process.env.AUTH_SERVER_URL],
     credentials: true,
   })
 )
@@ -83,7 +83,7 @@ const auth = betterAuth({
   emailAndPassword: {
     enabled: true,
   },
-  trustedOrigins: ['http://localhost:3000'],
+  trustedOrigins: [process.env.AUTH_SERVER_URL],
 })
 
 app.all('/api/auth/*splat', toNodeHandler(auth))
